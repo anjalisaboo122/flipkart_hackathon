@@ -506,46 +506,87 @@ with tab3:
 
     top_20_count_names = df_juncs_t3.nsmallest(20, "rank_count")["junction_name"].tolist()
     top_20_rate_names = df_juncs_t3.nsmallest(20, "rank_rate")["junction_name"].tolist()
-    camera_site_names = sorted(list(set(top_20_count_names) & set(top_20_rate_names)))
-    num_camera_sites = len(camera_site_names)
+    tier1_names = sorted(list(set(top_20_count_names) & set(top_20_rate_names)))
+    tier2_names = [name for name in df_juncs_t3["junction_name"] if name not in tier1_names]
+    num_camera_sites = len(tier1_names)
     
     # 2. Site count header
     st.markdown(
-        f"<h3 style='margin: 15px 0 5px 0; color: #00d4ff;'>📸 {num_camera_sites} of {len(df_juncs_t3)} junctions qualify for camera placement</h3>", 
+        f"<h3 style='margin: 15px 0 5px 0; color: #00d4ff;'>📸 {num_camera_sites} of {len(df_juncs_t3)} junctions qualify for Tier 1 camera placement</h3>", 
         unsafe_allow_html=True
     )
     st.caption("Criteria: Top-20 by raw violation count ∩ Top-20 by patrol-normalized rate (diminishes bias toward well-patrolled spots).")
+
+    # Two-card explainer row
+    ecol1, ecol2 = st.columns([1, 1])
+    with ecol1:
+        st.markdown(
+            """
+            <div style="background: rgba(0, 212, 255, 0.05); border: 1px solid rgba(0, 212, 255, 0.15); border-radius: 16px; padding: 16px; border-left: 4px solid rgb(0, 212, 255); height: 100%;">
+                <h4 style="margin: 0 0 10px 0; color: #00d4ff; font-size: 16px; font-weight: 600;">Tier 1 — Fixed Cameras</h4>
+                <p style="margin: 0; font-size: 14px; color: #ddd;">Guaranteed 24/7 coverage at our highest-priority sites — mounted on existing infrastructure like light poles and signal posts.</p>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    with ecol2:
+        st.markdown(
+            """
+            <div style="background: rgba(80, 140, 255, 0.05); border: 1px solid rgba(80, 140, 255, 0.15); border-radius: 16px; padding: 16px; border-left: 4px solid rgb(80, 140, 255); height: 100%;">
+                <h4 style="margin: 0 0 10px 0; color: #508cff; font-size: 16px; font-weight: 600;">Tier 2 — Ekart Fleet Coverage</h4>
+                <p style="margin: 0; font-size: 14px; color: #ddd;">Flipkart's Ekart delivery vehicles, already driving every corner of the city, carry a lightweight dashcam + edge model that passively flags violations during normal delivery runs. Self-funding — less illegal parking means faster Ekart deliveries.</p>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # Layout: Toggle and Selectbox
     tcol1, tcol2 = st.columns([1, 1])
     with tcol1:
         toggle_mode = st.radio(
             "Map Display Mode:",
-            ["All Junctions (Context)", "Camera Sites Only (Focus)"],
+            ["All Junctions (Context)", "Tier 1 — Fixed Cameras", "Tier 2 — Ekart Coverage", "Both Tiers (Focus)"],
             horizontal=True,
-            help="Show all junctions with recommended sites highlighted, or focus only on recommended sites."
+            help="Show all junctions with recommended sites highlighted, or focus only on specific tiers."
         )
     with tcol2:
+        all_inspectable_sites = sorted(list(set(tier1_names) | set(tier2_names)))
         selected_site_name = st.selectbox(
-            "Select Camera Site to Inspect:",
-            camera_site_names,
+            "Select Site to Inspect:",
+            all_inspectable_sites,
             help="Choose a recommended site to view detailed metrics and location on the map."
         )
 
     # 3. Setup map data
-    df_juncs_t3["is_camera_site"] = df_juncs_t3["junction_name"].isin(camera_site_names)
+    def assign_tier(name):
+        if name in tier1_names:
+            return "Tier 1 — Fixed Camera"
+        elif name in tier2_names:
+            return "Tier 2 — Ekart Coverage"
+        return "None"
+
+    df_juncs_t3["coverage_tier"] = df_juncs_t3["junction_name"].apply(assign_tier)
     
     # Map styling
-    df_juncs_t3["radius"] = df_juncs_t3.apply(
-        lambda r: 250 if r["is_camera_site"] else 120, axis=1
-    )
-    # Teal [0, 212, 255, 200] for camera sites, dimmed gray-blue [140, 160, 200, 110] for context
-    df_juncs_t3["color"] = df_juncs_t3.apply(
-        lambda r: [0, 212, 255, 200] if r["is_camera_site"] else [140, 160, 200, 110], axis=1
-    )
+    def get_radius(tier):
+        if tier == "Tier 1 — Fixed Camera": return 250
+        elif tier == "Tier 2 — Ekart Coverage": return 180
+        return 120
+
+    def get_color(tier):
+        if tier == "Tier 1 — Fixed Camera": return [0, 212, 255, 200]
+        elif tier == "Tier 2 — Ekart Coverage": return [80, 140, 255, 160]
+        return [140, 160, 200, 110]
+
+    df_juncs_t3["radius"] = df_juncs_t3["coverage_tier"].apply(get_radius)
+    df_juncs_t3["color"] = df_juncs_t3["coverage_tier"].apply(get_color)
     
-    if toggle_mode == "Camera Sites Only (Focus)":
-        df_map_t3 = df_juncs_t3[df_juncs_t3["is_camera_site"]].copy()
+    if toggle_mode == "Tier 1 — Fixed Cameras":
+        df_map_t3 = df_juncs_t3[df_juncs_t3["coverage_tier"] == "Tier 1 — Fixed Camera"].copy()
+    elif toggle_mode == "Tier 2 — Ekart Coverage":
+        df_map_t3 = df_juncs_t3[df_juncs_t3["coverage_tier"] == "Tier 2 — Ekart Coverage"].copy()
+    elif toggle_mode == "Both Tiers (Focus)":
+        df_map_t3 = df_juncs_t3[df_juncs_t3["coverage_tier"] != "None"].copy()
     else:
         df_map_t3 = df_juncs_t3.copy()
 
@@ -601,9 +642,9 @@ with tab3:
         map_style=pdk.map_styles.CARTO_DARK,
         tooltip={
             "html": "<b>Junction:</b> {junction_name}<br>"
+                    "<b>Coverage Tier:</b> {coverage_tier}<br>"
                     "<b>Violations:</b> {violation_count_str} (Rank #{rank_count})<br>"
-                    "<b>Patrol-Normalized Rate:</b> {patrol_normalized_rate_str} viols/device (Rank #{rank_rate})<br>"
-                    "<b>Camera Site:</b> {'YES' if is_camera_site else 'NO'}",
+                    "<b>Patrol-Normalized Rate:</b> {patrol_normalized_rate_str} viols/device (Rank #{rank_rate})",
             "style": {"backgroundColor": "#1a1a24", "color": "white", "fontSize": "13px"}
         }
     )
@@ -617,7 +658,7 @@ with tab3:
         st.markdown("### Selected Camera Site Details")
         
         # Suffix description based on ranking
-        qual_summary = f"Ranked #{sel_row['rank_count']} in raw violation volume and #{sel_row['rank_rate']} in patrol-normalized rate citywide."
+        qual_summary = f"Coverage Tier: {sel_row['coverage_tier']}. Ranked #{sel_row['rank_count']} in raw violation volume and #{sel_row['rank_rate']} in patrol-normalized rate citywide."
         if sel_row['junction_name'].startswith("BTP040"):
             qual_summary += " (Flagship Blind Spot: highest patrol-normalized rate in Bengaluru)"
             
@@ -738,7 +779,7 @@ with tab4:
             freeflow_val = res.get("freeflow_speed", 0.0)
             peak_val = res.get("peak_speed", 0.0)
             
-            st.markdown(
+            st.html(
                 f"""
                 <style>
                 @keyframes pulse {{
@@ -792,8 +833,7 @@ with tab4:
                         </div>
                     </div>
                 </div>
-                """,
-                unsafe_allow_html=True
+                """
             )
         else:
             # Show the error honestly
@@ -824,37 +864,34 @@ with tab4:
             
             if has_data:
                 if all_off_peak:
-                    st.markdown(
+                    st.html(
                         f"""
                         <div style="background: rgba(140, 160, 200, 0.08); border: 1px solid rgba(140, 160, 200, 0.2); border-radius: 12px; padding: 20px; margin: 15px 0; font-family: 'Outfit', sans-serif;">
                             <div style="font-size: 14px; color: #888896; font-weight: 600; text-transform: uppercase;">Historical Congestion Level</div>
                             <div style="font-size: 40px; font-weight: 800; color: #9CACE4; margin: 5px 0;">{mean_ratio:.2f}x <span style="font-size: 20px; font-weight: 400; color: #888896;">baseline</span></div>
                             <div style="font-size: 13px; color: #aaa;">Historical off-peak congestion ratio (all available records were logged during off-peak hours and are not representative of typical daytime conditions).</div>
                         </div>
-                        """,
-                        unsafe_allow_html=True
+                        """
                     )
                 else:
-                    st.markdown(
+                    st.html(
                         f"""
                         <div style="background: rgba(255, 195, 0, 0.08); border: 1px solid rgba(255, 195, 0, 0.2); border-radius: 12px; padding: 20px; margin: 15px 0; font-family: 'Outfit', sans-serif;">
                             <div style="font-size: 14px; color: #888896; font-weight: 600; text-transform: uppercase;">Historical Congestion Level</div>
                             <div style="font-size: 40px; font-weight: 800; color: #FFC300; margin: 5px 0;">{fallback_pct:.1f}%</div>
                             <div style="font-size: 13px; color: #aaa;">Real average derived from traffic validation log historical records for this site.</div>
                         </div>
-                        """,
-                        unsafe_allow_html=True
+                        """
                     )
             else:
-                st.markdown(
+                st.html(
                     """
                     <div style="background: rgba(255, 94, 126, 0.08); border: 1px solid rgba(255, 94, 126, 0.2); border-radius: 12px; padding: 20px; margin: 15px 0; font-family: 'Outfit', sans-serif;">
                         <div style="font-size: 14px; color: #888896; font-weight: 600; text-transform: uppercase;">Historical Congestion Level</div>
                         <div style="font-size: 28px; font-weight: 800; color: #FF5E7E; margin: 10px 0;">INSUFFICIENT DATA</div>
                         <div style="font-size: 13px; color: #aaa;">No historical validation log records exist on file for this specific junction site.</div>
                     </div>
-                    """,
-                    unsafe_allow_html=True
+                    """
                 )
 
     # 3. Simulated Time-Series Chart
