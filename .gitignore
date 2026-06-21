@@ -1,0 +1,18 @@
+﻿# Local environment variables
+.env
+.env.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+src/__pycache__/
+
+# Streamlit
+.streamlit/
+
+# Large raw dataset - excluded due to GitHub's 100MB file size limit
+data/jan to may police violation_anonymized791b166.csv
+
+# OS files
+.DS_Store
