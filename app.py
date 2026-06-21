@@ -1,5 +1,5 @@
 """
-GridLock AI — Predictive Parking Enforcement Intelligence
+traffiKart — Real-Time Traffic Intelligence
 Bengaluru Traffic Police | Flipkart Gridlock Hackathon
 
 Run: streamlit run app.py
@@ -37,71 +37,278 @@ from config import TOP_ZONES_PROPHET, ANTHROPIC_API_KEY, TOMTOM_API_KEY, MAPPLS_
 # Page config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="GridLock AI — Bengaluru",
-    page_icon="🚔",
+    page_title="traffiKart — Bengaluru",
+    page_icon="🚦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Inject custom CSS for premium aesthetics
+# Inject custom CSS — "highway / route" visual system with traffic light themes
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
-    
-    /* Set custom font */
-    html, body, [class*="css"] {
-        font-family: 'Outfit', sans-serif;
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800;900&family=Outfit:wght@700;800;900&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+        --bg: #0a0b0d;
+        --surface: #15171b;
+        --surface-2: #1b1e23;
+        --line: #272a30;
+        --line-soft: #1f2227;
+        --text: #edeef0;
+        --text-dim: #a7abb3;
+        --text-faint: #6c7078;
+        --red: #ef5350;
+        --amber: #f2b83d;
+        --green: #34d399;
+        --blue: #5b9df0;
+        --violet: #8b79f2;
     }
-    
-    /* Custom metric card styles */
+
+    /* Base type + background */
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+        color: var(--text);
+    }
+    h1, h2, h3, h4 {
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-weight: 800 !important;
+        letter-spacing: .2px;
+    }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* Clean road lanes texture across the app background */
+    [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+        background-color: var(--bg) !important;
+        background-image: 
+            radial-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 0),
+            radial-gradient(rgba(255, 255, 255, 0.008) 1.5px, transparent 0),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cline x1='40' y1='0' x2='40' y2='160' stroke='%23ffffff' stroke-width='4' stroke-dasharray='30%2C30' opacity='0.022'/%3E%3Cline x1='120' y1='0' x2='120' y2='160' stroke='%23ffffff' stroke-width='4' stroke-dasharray='30%2C30' opacity='0.022'/%3E%3C/svg%3E");
+        background-size: 32px 32px, 64px 64px, 160px 160px;
+        background-repeat: repeat;
+    }
+    [data-testid="stSidebar"] {
+        background-color: var(--surface) !important;
+        border-right: 1px solid var(--line);
+    }
+
+    /* Route eyebrow tag — used once per tab as a "stop along the route" marker */
+    .route-tag {
+        display: inline-block;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        color: #0a0b0d;
+        background: var(--amber);
+        padding: 3px 9px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+    }
+    .hero-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 800;
+        font-size: 40px;
+        margin: 0 0 2px 0;
+        line-height: 1.05;
+    }
+    .hero-sub {
+        font-family: 'Inter', sans-serif;
+        font-size: 16px;
+        color: var(--text-dim);
+        margin: 0 0 6px 0;
+        font-weight: 400;
+    }
+
+    /* Lane-line rule — replaces default <hr> everywhere with a dashed lane marking */
+    hr {
+        border: none !important;
+        height: 1px !important;
+        background-image: repeating-linear-gradient(to right, var(--line) 0 9px, transparent 9px 16px) !important;
+        margin: 22px 0 !important;
+    }
+
+    /* Section label with KM-style marker, used to break up long tabs into stops */
+    .km-label {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 4px 0 14px 0;
+    }
+    .km-label .km {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10.5px;
+        font-weight: 600;
+        color: #0a0b0d;
+        background: var(--amber);
+        padding: 3px 7px;
+        border-radius: 4px;
+        letter-spacing: .5px;
+        flex-shrink: 0;
+    }
+    .km-label .title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700;
+        font-size: 17px;
+        white-space: nowrap;
+    }
+    .km-label .rule {
+        flex: 1;
+        height: 1px;
+        background-image: repeating-linear-gradient(to right, var(--line) 0 9px, transparent 9px 16px);
+    }
+
+    /* Custom metric card styles — restyled as instrument-panel readouts */
     .metric-container {
-        display: flex; 
-        gap: 20px; 
-        justify-content: space-between; 
+        display: flex;
+        gap: 14px;
+        justify-content: space-between;
         flex-wrap: wrap;
-        margin: 20px 0;
+        margin: 18px 0;
     }
     .metric-card {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 24px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-top: 2px solid var(--amber);
+        border-radius: 10px;
+        padding: 18px 20px;
         flex: 1;
-        min-width: 250px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        min-width: 220px;
+        transition: border-color .2s ease, transform .2s ease;
     }
     .metric-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.35);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(255, 255, 255, 0.08);
+        transform: translateY(-2px);
+        border-color: #3a3f47;
     }
     .metric-title {
-        font-size: 13px; 
-        color: #888896; 
-        font-weight: 600; 
-        text-transform: uppercase; 
-        letter-spacing: 1.2px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--text-faint);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     .metric-value {
-        font-size: 38px; 
-        font-weight: 800; 
-        margin: 12px 0 6px 0;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 32px;
+        font-weight: 800;
+        margin: 10px 0 6px 0;
         line-height: 1;
     }
     .metric-delta {
-        font-size: 14px; 
+        font-size: 13px;
         font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
     }
-    
+
+    /* Custom hazard stripe divider and text */
+    .hazard-container {
+        margin: 22px 0;
+        background: #0a0b0d;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    .hazard-stripes {
+        height: 10px;
+        background: repeating-linear-gradient(
+            -45deg,
+            #f2b83d,
+            #f2b83d 12px,
+            #0a0b0d 12px,
+            #0a0b0d 24px
+        );
+    }
+    .hazard-text {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-dim);
+        text-align: center;
+        padding: 7px 6px;
+        letter-spacing: 1.2px;
+        background: #111215;
+    }
+
     /* Accent gradients */
     .text-gradient {
-        background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+        background: linear-gradient(135deg, #ef5350 0%, #f2b83d 50%, #34d399 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+    }
+
+    /* Tabs styled as a route selector — colored dot per stop, amber active underline */
+    [data-baseweb="tab-list"] {
+        gap: 16px !important;
+        border-bottom: 2px solid var(--line) !important;
+        padding-bottom: 8px !important;
+    }
+    [data-baseweb="tab-list"] button {
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-weight: 800 !important;
+        font-size: 22px !important;
+        color: var(--text-dim) !important;
+        letter-spacing: 0.5px !important;
+        transition: all 0.3s ease !important;
+        padding: 10px 18px !important;
+        border-radius: 8px !important;
+    }
+    [data-baseweb="tab-list"] button p { 
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-weight: 800 !important;
+        font-size: 22px !important;
+    }
+    [data-baseweb="tab-highlight"] { 
+        background-color: var(--amber) !important; 
+        height: 3px !important; 
+    }
+    [data-baseweb="tab-list"] button[aria-selected="true"] { 
+        color: var(--text) !important; 
+        background: rgba(255, 255, 255, 0.03) !important;
+    }
+    [data-baseweb="tab-list"] button::before {
+        content: "";
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 10px;
+        opacity: 0.35;
+        transition: all 0.3s ease;
+        vertical-align: middle;
+    }
+    [data-baseweb="tab-list"] button:nth-of-type(1)::before { 
+        background: var(--red) !important; 
+        box-shadow: 0 0 4px var(--red);
+    }
+    [data-baseweb="tab-list"] button:nth-of-type(2)::before { 
+        background: var(--amber) !important; 
+        box-shadow: 0 0 4px var(--amber);
+    }
+    [data-baseweb="tab-list"] button:nth-of-type(3)::before { 
+        background: var(--blue) !important; 
+        box-shadow: 0 0 4px var(--blue);
+    }
+    [data-baseweb="tab-list"] button:nth-of-type(4)::before { 
+        background: var(--green) !important; 
+        box-shadow: 0 0 4px var(--green);
+    }
+    [data-baseweb="tab-list"] button[aria-selected="true"]::before { 
+        opacity: 1 !important; 
+        transform: scale(1.15);
+    }
+    [data-baseweb="tab-list"] button[aria-selected="true"]:nth-of-type(1)::before { 
+        box-shadow: 0 0 10px var(--red), 0 0 18px var(--red) !important; 
+    }
+    [data-baseweb="tab-list"] button[aria-selected="true"]:nth-of-type(2)::before { 
+        box-shadow: 0 0 10px var(--amber), 0 0 18px var(--amber) !important; 
+    }
+    [data-baseweb="tab-list"] button[aria-selected="true"]:nth-of-type(3)::before { 
+        box-shadow: 0 0 10px var(--blue), 0 0 18px var(--blue) !important; 
+    }
+    [data-baseweb="tab-list"] button[aria-selected="true"]:nth-of-type(4)::before { 
+        box-shadow: 0 0 10px var(--green), 0 0 18px var(--green) !important; 
     }
     </style>
     """,
@@ -155,38 +362,69 @@ with st.spinner("Loading violations dataset..."):
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Bangalore_Traffic_Police_logo.svg/200px-Bangalore_Traffic_Police_logo.svg.png", width=80, use_container_width=False)
-st.sidebar.title("GridLock AI")
-st.sidebar.markdown("*Predictive Parking Enforcement Intelligence*")
-st.sidebar.markdown("---")
+st.sidebar.markdown(
+    """
+    <div style="margin-top: 20px; margin-bottom: 8px; padding-left: 5px;">
+        <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 900; font-size: 38px; color: #ffffff; line-height: 0.9; letter-spacing: 1px;">TRAFFIKART</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6c7078; margin-top: 6px; letter-spacing: 1.2px;">// BENGALURU TRAFFIC POLICE</div>
+    </div>
+    <div style="height:1px; margin:18px 0; background-image:repeating-linear-gradient(to right, #272a30 0 9px, transparent 9px 16px);"></div>
+    """,
+    unsafe_allow_html=True
+)
 
 now = datetime.now()
-st.sidebar.markdown(f"**Date:** {now.strftime('%d %b %Y')}")
-st.sidebar.markdown(f"**Time:** {now.strftime('%H:%M IST')}")
-st.sidebar.markdown(f"**Day:** {now.strftime('%A')}")
-st.sidebar.markdown("---")
+st.sidebar.markdown(
+    f"""
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:12.5px;">
+        <div style="display:flex; justify-content:space-between;"><span style="color:#6c7078;">Date</span><span class="mono" style="color:#edeef0;">{now.strftime('%d %b %Y')}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span style="color:#6c7078;">Time</span><span class="mono" style="color:#edeef0;">{now.strftime('%H:%M IST')}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span style="color:#6c7078;">Day</span><span class="mono" style="color:#edeef0;">{now.strftime('%A')}</span></div>
+    </div>
+    <div style="height:1px; margin:18px 0; background-image:repeating-linear-gradient(to right, #272a30 0 9px, transparent 9px 16px);"></div>
+    """,
+    unsafe_allow_html=True
+)
 
-st.sidebar.markdown(f"**Records:** {stats['total_violations']:,}")
-st.sidebar.markdown(f"**H3 zones:** {stats['unique_zones']}")
-st.sidebar.markdown(f"**Junctions mapped:** {len(df_juncs)}")
-st.sidebar.markdown(f"**Date range:** {stats['date_range'][0]} → {stats['date_range'][1]}")
+st.sidebar.markdown(
+    f"""
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:12.5px; margin-bottom: 20px;">
+        <div style="display:flex; justify-content:space-between;"><span style="color:#6c7078;">Records</span><span class="mono" style="color:#edeef0;">{stats['total_violations']:,}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span style="color:#6c7078;">H3 zones</span><span class="mono" style="color:#edeef0;">{stats['unique_zones']}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span style="color:#6c7078;">Junctions mapped</span><span class="mono" style="color:#edeef0;">{len(df_juncs)}</span></div>
+        <div style="display:flex; justify-content:space-between; gap:8px;"><span style="color:#6c7078;">Date range</span><span class="mono" style="color:#edeef0; font-size:11px; text-align:right;">{stats['date_range'][0]} → {stats['date_range'][1]}</span></div>
+    </div>
+    <div class="hazard-container" style="margin-top: 30px;">
+        <div class="hazard-stripes"></div>
+        <div class="hazard-text">TRAFFIKART · TRAFFIC DETECTION</div>
+        <div class="hazard-stripes"></div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # ---------------------------------------------------------------------------
 # Main Tabs Layout
 # ---------------------------------------------------------------------------
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🗺️ The Blind Spot",
-    "⏰ The Timing Gap",
-    "📹 Camera Placement",
-    "📡 Live Monitoring"
+    "The Blind Spot",
+    "The Timing Gap",
+    "Camera Placement",
+    "Live Monitoring"
 ])
 
 # ════════════════════════════════════════════════════════════════════════════
 # TAB 1 — The Blind Spot
 # ════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.markdown("<h1 style='margin-bottom:0;'>The Blind Spot</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:18px; color:#aaa; margin-top:0;'>Identifying critical gaps between raw violations and officer coverage</p>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="route-tag">STOP 01 / 04 — COVERAGE GAP</div>
+        <div class="hero-title">The Blind Spot</div>
+        <p class="hero-sub">Identifying critical gaps between raw violations and officer coverage</p>
+        """,
+        unsafe_allow_html=True
+    )
     
     # Toggle map coloring/sizing mode
     map_metric = st.radio(
@@ -279,7 +517,7 @@ with tab1:
             "<b>Violations:</b> {violation_count_str}<br/>"
             "<b>Patrol-Normalized Rate:</b> {patrol_normalized_rate_str} viols/device<br/>"
             "<b>Avg Severity:</b> {avg_severity_str}",
-            "style": {"backgroundColor": "#1a1a2e", "color": "white"}
+            "style": {"backgroundColor": "#15171b", "color": "white"}
         },
     )
     
@@ -287,7 +525,16 @@ with tab1:
     
     # Highlight BTP040 Callout Card (headline junction)
     st.markdown("---")
-    st.markdown("### Critical Focus Area: Junction `BTP040` (Elite Junction)")
+    st.markdown(
+        """
+        <div class="km-label">
+            <span class="km">FOCUS</span>
+            <span class="title">Critical Focus Area: Junction BTP040 (Elite Junction)</span>
+            <span class="rule"></span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     st.markdown(
         "Junction **BTP040** stands as the city's #1 ranked blind spot. "
         "Despite having an enormous raw violation count, its patrol frequency is highly "
@@ -339,8 +586,14 @@ with tab1:
 # TAB 2 — The Timing Gap
 # ════════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.markdown("<h1 style='margin-bottom:0;'>The Timing Gap</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:18px; color:#aaa; margin-top:0;'>The mismatch between police shifts and peak congestion hours</p>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="route-tag">STOP 02 / 04 — SHIFT MISMATCH</div>
+        <div class="hero-title">The Timing Gap</div>
+        <p class="hero-sub">The mismatch between police shifts and peak congestion hours</p>
+        """,
+        unsafe_allow_html=True
+    )
     
     # Load and process traffic_validation_fixed.csv
     try:
@@ -379,7 +632,7 @@ with tab2:
             x=plot_df["hour"],
             y=plot_df["violation_count"],
             name="Violations Recorded (Enforcement Activity)",
-            marker_color="rgba(100, 149, 237, 0.75)", # Cornflower Blue
+            marker_color="rgba(91, 157, 240, 0.75)", # --blue
             hovertemplate="Hour %{x}:00<br>Violations: %{y:,}<br>Share: %{customdata:.2f}%<extra></extra>",
             customdata=plot_df["pct"]
         ),
@@ -392,7 +645,7 @@ with tab2:
             x=plot_df["hour"],
             y=plot_df["mean_congestion"],
             name="Observed Congestion Ratio",
-            line=dict(color="#FF8E53", width=4), # Coral/Amber line
+            line=dict(color="#F2B83D", width=4), # --amber
             mode="lines+markers",
             hovertemplate="Hour %{x}:00<br>Congestion Ratio: %{y:.2f}<extra></extra>"
         ),
@@ -402,12 +655,12 @@ with tab2:
     # Highlight 5 PM - 8 PM window (Hours 17-20)
     fig.add_vrect(
         x0=17, x1=20,
-        fillcolor="rgba(255, 195, 0, 0.15)",
+        fillcolor="rgba(242, 184, 61, 0.15)",
         layer="below",
         line_width=0,
         annotation_text="The timing gap",
         annotation_position="top left",
-        annotation_font=dict(size=12, color="#FFC300", family="Outfit")
+        annotation_font=dict(size=12, color="#F2B83D", family="JetBrains Mono")
     )
     
     # Add text annotation
@@ -420,20 +673,20 @@ with tab2:
         arrowhead=2,
         arrowsize=1,
         arrowwidth=2,
-        arrowcolor="#FFC300",
+        arrowcolor="#F2B83D",
         ax=-50,
         ay=-70,
-        font=dict(size=11, color="white", family="Outfit"),
-        bordercolor="#FFC300",
+        font=dict(size=11, color="white", family="Inter"),
+        bordercolor="#F2B83D",
         borderpad=6,
-        bgcolor="#1a1a24",
+        bgcolor="#15171b",
         opacity=0.9
     )
     
     # Layout styling for dark mode dashboard
     fig.update_layout(
         title="24-Hour Comparison: Enforcement vs. Congestion",
-        title_font=dict(size=18, family="Outfit", color="white"),
+        title_font=dict(size=18, family="Space Grotesk", color="white"),
         xaxis=dict(
             title="Hour of Day (24h)",
             tickmode="linear",
@@ -475,8 +728,8 @@ with tab2:
     # Real numbers caption
     st.markdown(
         """
-        <div style="background: rgba(255, 195, 0, 0.08); border: 1px solid rgba(255, 195, 0, 0.2); border-radius: 12px; padding: 16px; margin: 15px 0;">
-            <p style="margin: 0; font-size: 15px; color: #FFC300; font-weight: 500; line-height: 1.5;">
+        <div style="background: rgba(242, 184, 61, 0.08); border: 1px solid rgba(242, 184, 61, 0.2); border-left: 3px solid #f2b83d; border-radius: 8px; padding: 16px; margin: 15px 0;">
+            <p style="margin: 0; font-size: 15px; color: #F2B83D; font-weight: 500; line-height: 1.5;">
                 ⚠️ <strong>Key Insight:</strong> 96.67% of violations are logged before 2:00 PM (end of day shift), 
                 whereas traffic congestion peaks at 5:00 PM (mean congestion ratio: 1.41) with only 0.20% of violations 
                 recorded between 5:00 PM and 8:00 PM.
@@ -496,8 +749,14 @@ with tab2:
 # TAB 3 — Camera Placement
 # ════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.markdown("<h1 style='margin-bottom:0;'>Camera Placement</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:18px; color:#aaa; margin-top:0;'>Strategic selection of automatic enforcement locations</p>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="route-tag">STOP 03 / 04 — DEPLOYMENT PLAN</div>
+        <div class="hero-title">Camera Placement</div>
+        <p class="hero-sub">Strategic selection of automatic enforcement locations</p>
+        """,
+        unsafe_allow_html=True
+    )
 
     # 1. Compute ranks and intersection
     df_juncs_t3 = df_juncs.copy()
@@ -512,7 +771,7 @@ with tab3:
     
     # 2. Site count header
     st.markdown(
-        f"<h3 style='margin: 15px 0 5px 0; color: #00d4ff;'>📸 {num_camera_sites} of {len(df_juncs_t3)} junctions qualify for Tier 1 camera placement</h3>", 
+        f"<h3 style='margin: 15px 0 5px 0; color: #5b9df0; font-family: \"Space Grotesk\", sans-serif;'>📸 {num_camera_sites} of {len(df_juncs_t3)} junctions qualify for Tier 1 camera placement</h3>", 
         unsafe_allow_html=True
     )
     st.caption("Criteria: Top-20 by raw violation count ∩ Top-20 by patrol-normalized rate (diminishes bias toward well-patrolled spots).")
@@ -522,8 +781,8 @@ with tab3:
     with ecol1:
         st.markdown(
             """
-            <div style="background: rgba(0, 212, 255, 0.05); border: 1px solid rgba(0, 212, 255, 0.15); border-radius: 16px; padding: 16px; border-left: 4px solid rgb(0, 212, 255); height: 100%;">
-                <h4 style="margin: 0 0 10px 0; color: #00d4ff; font-size: 16px; font-weight: 600;">Tier 1 — Fixed Cameras</h4>
+            <div style="background: rgba(91, 157, 240, 0.06); border: 1px solid rgba(91, 157, 240, 0.18); border-radius: 10px; padding: 16px; border-left: 3px solid #5b9df0; height: 100%;">
+                <h4 style="margin: 0 0 10px 0; color: #5b9df0; font-size: 16px; font-weight: 700;">Tier 1 — Fixed Cameras</h4>
                 <p style="margin: 0; font-size: 14px; color: #ddd;">Guaranteed 24/7 coverage at our highest-priority sites — mounted on existing infrastructure like light poles and signal posts.</p>
             </div>
             """, unsafe_allow_html=True
@@ -531,8 +790,8 @@ with tab3:
     with ecol2:
         st.markdown(
             """
-            <div style="background: rgba(80, 140, 255, 0.05); border: 1px solid rgba(80, 140, 255, 0.15); border-radius: 16px; padding: 16px; border-left: 4px solid rgb(80, 140, 255); height: 100%;">
-                <h4 style="margin: 0 0 10px 0; color: #508cff; font-size: 16px; font-weight: 600;">Tier 2 — Ekart Fleet Coverage</h4>
+            <div style="background: rgba(139, 121, 242, 0.06); border: 1px solid rgba(139, 121, 242, 0.18); border-radius: 10px; padding: 16px; border-left: 3px solid #8b79f2; height: 100%;">
+                <h4 style="margin: 0 0 10px 0; color: #8b79f2; font-size: 16px; font-weight: 700;">Tier 2 — Ekart Fleet Coverage</h4>
                 <p style="margin: 0; font-size: 14px; color: #ddd;">Flipkart's Ekart delivery vehicles, already driving every corner of the city, carry a lightweight dashcam + edge model that passively flags violations during normal delivery runs. Self-funding — less illegal parking means faster Ekart deliveries.</p>
             </div>
             """, unsafe_allow_html=True
@@ -574,9 +833,9 @@ with tab3:
         return 120
 
     def get_color(tier):
-        if tier == "Tier 1 — Fixed Camera": return [0, 212, 255, 200]
-        elif tier == "Tier 2 — Ekart Coverage": return [80, 140, 255, 160]
-        return [140, 160, 200, 110]
+        if tier == "Tier 1 — Fixed Camera": return [91, 157, 240, 200]
+        elif tier == "Tier 2 — Ekart Coverage": return [139, 121, 242, 160]
+        return [120, 125, 135, 100]
 
     df_juncs_t3["radius"] = df_juncs_t3["coverage_tier"].apply(get_radius)
     df_juncs_t3["color"] = df_juncs_t3["coverage_tier"].apply(get_color)
@@ -645,7 +904,7 @@ with tab3:
                     "<b>Coverage Tier:</b> {coverage_tier}<br>"
                     "<b>Violations:</b> {violation_count_str} (Rank #{rank_count})<br>"
                     "<b>Patrol-Normalized Rate:</b> {patrol_normalized_rate_str} viols/device (Rank #{rank_rate})",
-            "style": {"backgroundColor": "#1a1a24", "color": "white", "fontSize": "13px"}
+            "style": {"backgroundColor": "#15171b", "color": "white", "fontSize": "13px"}
         }
     )
     
@@ -664,8 +923,8 @@ with tab3:
             
         st.markdown(
             f"""
-            <div style="background: rgba(0, 212, 255, 0.05); border: 1px solid rgba(0, 212, 255, 0.15); border-radius: 16px; padding: 24px; margin-top: 15px;">
-                <h4 style="margin: 0 0 15px 0; color: #00d4ff; font-weight: 700; font-size: 20px;">{sel_row['junction_name']}</h4>
+            <div style="background: rgba(91, 157, 240, 0.05); border: 1px solid rgba(91, 157, 240, 0.15); border-radius: 10px; padding: 24px; margin-top: 15px;">
+                <h4 style="margin: 0 0 15px 0; color: #5b9df0; font-weight: 700; font-size: 20px; font-family: 'Space Grotesk', sans-serif;">{sel_row['junction_name']}</h4>
                 <div class="metric-container" style="margin: 0 0 20px 0;">
                     <div class="metric-card" style="padding: 16px;">
                         <div class="metric-title">Violation Count</div>
@@ -697,8 +956,14 @@ with tab3:
 # TAB 4 — Live Monitoring
 # ════════════════════════════════════════════════════════════════════════════
 with tab4:
-    st.markdown("<h1 style='margin-bottom:0;'>Live Monitoring</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:18px; color:#aaa; margin-top:0;'>Real-time automatic congestion surveillance proof-of-concept</p>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="route-tag">STOP 04 / 04 — LIVE PROOF</div>
+        <div class="hero-title">Live Monitoring</div>
+        <p class="hero-sub">Real-time automatic congestion surveillance proof-of-concept</p>
+        """,
+        unsafe_allow_html=True
+    )
     
     # 1. Selector for camera sites
     # Calculate camera sites again to ensure identical list as Tab 3
@@ -790,30 +1055,30 @@ with tab4:
                 .live-pulse-dot {{
                     width: 10px;
                     height: 10px;
-                    background-color: #00ffcc;
+                    background-color: #34d399;
                     border-radius: 50%;
-                    box-shadow: 0 0 8px #00ffcc, 0 0 16px #00ffcc;
+                    box-shadow: 0 0 8px #34d399, 0 0 16px #34d399;
                     animation: pulse 1.5s infinite ease-in-out;
                     display: inline-block;
                 }}
                 </style>
-                <div style="background: linear-gradient(135deg, rgba(24, 28, 41, 0.95), rgba(15, 18, 27, 0.95)); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 16px; padding: 24px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); margin: 20px 0; font-family: 'Outfit', sans-serif;">
+                <div style="background: linear-gradient(135deg, rgba(21, 23, 27, 0.95), rgba(10, 11, 13, 0.95)); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 12px; padding: 24px; margin: 20px 0; font-family: 'Inter', sans-serif;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px; margin-bottom: 20px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <div class="live-pulse-dot"></div>
-                            <span style="font-size: 14px; font-weight: 700; color: #00ffcc; letter-spacing: 0.05em; text-transform: uppercase;">Live Feed Active</span>
+                            <span style="font-size: 14px; font-weight: 700; color: #34d399; letter-spacing: 0.05em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace;">Live Feed Active</span>
                         </div>
-                        <span style="font-size: 12px; color: #888896; font-weight: 500;">Mappls Telematics Engine v2.0</span>
+                        <span style="font-size: 12px; color: #6c7078; font-weight: 500; font-family: 'JetBrains Mono', monospace;">Mappls Telematics Engine v2.0</span>
                     </div>
                     
                     <div style="display: flex; flex-direction: row; gap: 20px; align-items: center; flex-wrap: wrap;">
                         <!-- Left: Congestion percentage gauge -->
                         <div style="flex: 1; min-width: 180px;">
-                            <div style="font-size: 13px; color: #888896; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Live Congestion Index</div>
+                            <div style="font-size: 13px; color: #6c7078; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'JetBrains Mono', monospace;">Live Congestion Index</div>
                             <div style="display: flex; align-items: baseline; gap: 4px; margin-top: 5px;">
-                                <span style="font-size: 54px; font-weight: 800; background: linear-gradient(90deg, #00d4ff, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{res['value']:.1f}%</span>
+                                <span style="font-family: 'Space Grotesk', sans-serif; font-size: 54px; font-weight: 800; background: linear-gradient(90deg, #5b9df0, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{res['value']:.1f}%</span>
                             </div>
-                            <div style="font-size: 12px; color: #a5a5b4; margin-top: 8px; line-height: 1.4;">
+                            <div style="font-size: 12px; color: #a7abb3; margin-top: 8px; line-height: 1.4;">
                                 Comparing current routing duration with freeflow (route_eta vs route_adv)
                             </div>
                         </div>
@@ -821,14 +1086,14 @@ with tab4:
                         <!-- Right: Supporting speed metrics -->
                         <div style="flex: 1.2; min-width: 240px; display: flex; gap: 20px; border-left: 1px solid rgba(255, 255, 255, 0.08); padding-left: 20px;">
                             <div style="flex: 1;">
-                                <div style="font-size: 11px; color: #888896; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Freeflow Speed</div>
-                                <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 5px;">{freeflow_val:.2f} <span style="font-size: 13px; font-weight: 400; color: #888896;">km/h</span></div>
-                                <div style="font-size: 11px; color: #626270; margin-top: 4px; line-height: 1.3;">Theoretical maximum (route_adv)</div>
+                                <div style="font-size: 11px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'JetBrains Mono', monospace;">Freeflow Speed</div>
+                                <div style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: #edeef0; margin-top: 5px;">{freeflow_val:.2f} <span style="font-size: 13px; font-weight: 400; color: #6c7078;">km/h</span></div>
+                                <div style="font-size: 11px; color: #6c7078; margin-top: 4px; line-height: 1.3;">Theoretical maximum (route_adv)</div>
                             </div>
                             <div style="flex: 1;">
-                                <div style="font-size: 11px; color: #888896; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Peak (ETA) Speed</div>
-                                <div style="font-size: 24px; font-weight: 700; color: #ff5e7e; margin-top: 5px;">{peak_val:.2f} <span style="font-size: 13px; font-weight: 400; color: #888896;">km/h</span></div>
-                                <div style="font-size: 11px; color: #626270; margin-top: 4px; line-height: 1.3;">Real-time traffic speed (route_eta)</div>
+                                <div style="font-size: 11px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'JetBrains Mono', monospace;">Peak (ETA) Speed</div>
+                                <div style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: #ef5350; margin-top: 5px;">{peak_val:.2f} <span style="font-size: 13px; font-weight: 400; color: #6c7078;">km/h</span></div>
+                                <div style="font-size: 11px; color: #6c7078; margin-top: 4px; line-height: 1.3;">Real-time traffic speed (route_eta)</div>
                             </div>
                         </div>
                     </div>
@@ -866,37 +1131,46 @@ with tab4:
                 if all_off_peak:
                     st.html(
                         f"""
-                        <div style="background: rgba(140, 160, 200, 0.08); border: 1px solid rgba(140, 160, 200, 0.2); border-radius: 12px; padding: 20px; margin: 15px 0; font-family: 'Outfit', sans-serif;">
-                            <div style="font-size: 14px; color: #888896; font-weight: 600; text-transform: uppercase;">Historical Congestion Level</div>
-                            <div style="font-size: 40px; font-weight: 800; color: #9CACE4; margin: 5px 0;">{mean_ratio:.2f}x <span style="font-size: 20px; font-weight: 400; color: #888896;">baseline</span></div>
-                            <div style="font-size: 13px; color: #aaa;">Historical off-peak congestion ratio (all available records were logged during off-peak hours and are not representative of typical daytime conditions).</div>
+                        <div style="background: rgba(91, 157, 240, 0.06); border: 1px solid rgba(91, 157, 240, 0.2); border-left: 3px solid #5b9df0; border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Inter', sans-serif;">
+                            <div style="font-size: 12px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-family: 'JetBrains Mono', monospace;">Historical Congestion Level</div>
+                            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 800; color: #5b9df0; margin: 5px 0;">{mean_ratio:.2f}x <span style="font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 400; color: #6c7078;">baseline</span></div>
+                            <div style="font-size: 13px; color: #a7abb3;">Historical off-peak congestion ratio (all available records were logged during off-peak hours and are not representative of typical daytime conditions).</div>
                         </div>
                         """
                     )
                 else:
                     st.html(
                         f"""
-                        <div style="background: rgba(255, 195, 0, 0.08); border: 1px solid rgba(255, 195, 0, 0.2); border-radius: 12px; padding: 20px; margin: 15px 0; font-family: 'Outfit', sans-serif;">
-                            <div style="font-size: 14px; color: #888896; font-weight: 600; text-transform: uppercase;">Historical Congestion Level</div>
-                            <div style="font-size: 40px; font-weight: 800; color: #FFC300; margin: 5px 0;">{fallback_pct:.1f}%</div>
-                            <div style="font-size: 13px; color: #aaa;">Real average derived from traffic validation log historical records for this site.</div>
+                        <div style="background: rgba(242, 184, 61, 0.06); border: 1px solid rgba(242, 184, 61, 0.2); border-left: 3px solid #f2b83d; border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Inter', sans-serif;">
+                            <div style="font-size: 12px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-family: 'JetBrains Mono', monospace;">Historical Congestion Level</div>
+                            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 800; color: #f2b83d; margin: 5px 0;">{fallback_pct:.1f}%</div>
+                            <div style="font-size: 13px; color: #a7abb3;">Real average derived from traffic validation log historical records for this site.</div>
                         </div>
                         """
                     )
             else:
                 st.html(
                     """
-                    <div style="background: rgba(255, 94, 126, 0.08); border: 1px solid rgba(255, 94, 126, 0.2); border-radius: 12px; padding: 20px; margin: 15px 0; font-family: 'Outfit', sans-serif;">
-                        <div style="font-size: 14px; color: #888896; font-weight: 600; text-transform: uppercase;">Historical Congestion Level</div>
-                        <div style="font-size: 28px; font-weight: 800; color: #FF5E7E; margin: 10px 0;">INSUFFICIENT DATA</div>
-                        <div style="font-size: 13px; color: #aaa;">No historical validation log records exist on file for this specific junction site.</div>
+                    <div style="background: rgba(239, 83, 80, 0.06); border: 1px solid rgba(239, 83, 80, 0.2); border-left: 3px solid #ef5350; border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Inter', sans-serif;">
+                        <div style="font-size: 12px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-family: 'JetBrains Mono', monospace;">Historical Congestion Level</div>
+                        <div style="font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 800; color: #ef5350; margin: 10px 0;">INSUFFICIENT DATA</div>
+                        <div style="font-size: 13px; color: #a7abb3;">No historical validation log records exist on file for this specific junction site.</div>
                     </div>
                     """
                 )
 
     # 3. Simulated Time-Series Chart
     st.markdown("---")
-    st.markdown("### Continuous Surveillance Simulation")
+    st.markdown(
+        """
+        <div class="km-label">
+            <span class="km">SIM</span>
+            <span class="title">Continuous Surveillance Simulation</span>
+            <span class="rule"></span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     st.markdown("This chart simulates what continuous camera monitoring would produce over a 72-hour period based on historical diurnal patterns, overlaid with any actual observed readings we have on file.")
 
     # Time series calculations
@@ -958,13 +1232,13 @@ with tab4:
                 y=real_hourly["actual_congestion"],
                 name="Actual observed readings",
                 mode="markers",
-                marker=dict(color="#00d4ff", size=10, symbol="circle", line=dict(color="white", width=1.5))
+                marker=dict(color="#34d399", size=10, symbol="circle", line=dict(color="white", width=1.5))
             )
         )
         
     fig_monitor.update_layout(
         title=f"72-Hour Congestion Surveillance — {selected_monitor_site}",
-        title_font=dict(size=16, family="Outfit", color="white"),
+        title_font=dict(size=16, family="Space Grotesk", color="white"),
         xaxis=dict(
             title="Time (June 19 – June 21, 2026)",
             gridcolor="rgba(255,255,255,0.05)",
