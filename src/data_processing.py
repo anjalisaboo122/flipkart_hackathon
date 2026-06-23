@@ -20,7 +20,7 @@ def _safe_parse_json(val):
 
 
 def load_data() -> pd.DataFrame:
-    df = pd.read_csv(DATA_PATH, low_memory=False)
+    df = pd.read_parquet(DATA_PATH)
 
     df["violation_type"] = df["violation_type"].apply(_safe_parse_json)
     df["offence_code"]   = df["offence_code"].apply(_safe_parse_json)

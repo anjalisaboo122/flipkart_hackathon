@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "jan to may police violation_anonymized791b166.csv")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "police_violations.parquet")
 
 H3_RESOLUTION      = 8      # ~460m hexagons
 MIN_VIOLATIONS     = 10     # minimum for a zone to qualify
