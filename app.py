@@ -520,7 +520,7 @@ st.sidebar.markdown(
     <div style="height:1px; margin:18px 0; background-image:repeating-linear-gradient(to right, #272a30 0 9px, transparent 9px 16px);"></div>
     
     <a href="https://huggingface.co/" target="_blank" style="display:flex; align-items:center; justify-content:center; gap:10px; padding:14px 16px; margin: 25px 0 10px 0; border-radius:10px; background:linear-gradient(135deg, rgba(139,121,242,0.1) 0%, rgba(91,157,240,0.1) 100%); border:1px solid rgba(139,121,242,0.4); color:#8b79f2; text-decoration:none; font-family:'Inter', sans-serif; font-weight:700; font-size:14px; letter-spacing:0.5px; box-shadow:0 0 15px rgba(139,121,242,0.15);">
-        <span style="font-size:16px;">📹</span> Launch OUR Illegal Parking Detection Model ↗
+        <span style="font-size:16px;">📹</span> Launch Our Illegal Parking Detection Model ↗
     </a>
     """,
     unsafe_allow_html=True
