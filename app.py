@@ -554,7 +554,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.markdown(
         """
-        <div class="route-tag">STOP 01 / 04 — COVERAGE GAP</div>
+        <div class="route-tag">STOP 01 / 05 — COVERAGE GAP</div>
         <div class="hero-title">The Blind Spot</div>
         <p class="hero-sub">Identifying critical gaps between raw violations and officer coverage</p>
         """,
@@ -723,7 +723,7 @@ with tab1:
 with tab2:
     st.markdown(
         """
-        <div class="route-tag">STOP 02 / 04 — SHIFT MISMATCH</div>
+        <div class="route-tag">STOP 02 / 05 — SHIFT MISMATCH</div>
         <div class="hero-title">The Timing Gap</div>
         <p class="hero-sub">The mismatch between police shifts and peak congestion hours</p>
         """,
@@ -885,7 +885,7 @@ with tab2:
 with tab3:
     st.markdown(
         """
-        <div class="route-tag">STOP 03 / 04 — DEPLOYMENT PLAN</div>
+        <div class="route-tag">STOP 03 / 05 — DEPLOYMENT PLAN</div>
         <div class="hero-title">Camera Placement</div>
         <p class="hero-sub">Strategic selection of automatic enforcement locations</p>
         """,
@@ -1092,7 +1092,7 @@ with tab3:
 with tab4:
     st.markdown(
         """
-        <div class="route-tag">STOP 04 / 04 — LIVE PROOF</div>
+        <div class="route-tag">STOP 04 / 05 — LIVE PROOF</div>
         <div class="hero-title">Live Monitoring</div>
         <p class="hero-sub">Real-time automatic congestion surveillance proof-of-concept</p>
         """,
@@ -1364,6 +1364,12 @@ with tab4:
 # TAB 5 — Delivery Coverage
 # ════════════════════════════════════════════════════════════════════════════
 with tab5:
+    st.markdown(
+        """
+        <div class="route-tag">STOP 05 / 05 — DELIVERY IMPACT</div>
+        """,
+        unsafe_allow_html=True
+    )
     st.markdown("<h1 style='margin-bottom:0;'>Delivery Fleet Coverage</h1>", unsafe_allow_html=True)
     st.markdown(
         "<p style='font-size:18px; color:#aaa; margin-top:0;'>Do existing delivery networks already saturate our enforcement hotspots?</p>",
