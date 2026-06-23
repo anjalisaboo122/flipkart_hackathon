@@ -294,6 +294,10 @@ st.markdown(
         background: var(--green) !important; 
         box-shadow: 0 0 4px var(--green);
     }
+    [data-baseweb="tab-list"] button:nth-of-type(5)::before { 
+        background: var(--violet) !important; 
+        box-shadow: 0 0 4px var(--violet);
+    }
     [data-baseweb="tab-list"] button[aria-selected="true"]::before { 
         opacity: 1 !important; 
         transform: scale(1.15);
@@ -530,7 +534,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "⏰ The Timing Gap",
     "📹 Camera Placement",
     "📡 Live Monitoring",
-    "🛵 Delivery Coverage",
+    "Delivery Coverage",
 ])
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1117,7 +1121,13 @@ with tab4:
     if "live_fetch_results" not in st.session_state:
         st.session_state["live_fetch_results"] = {}
 
-    fetch_clicked = st.button("📡 Fetch Live Congestion Data", type="primary")
+    import os
+    has_token = bool(os.environ.get("MAPPLS_TOKEN"))
+    
+    if not has_token:
+        st.info("ℹ️ **Demo Mode:** Live API fetching is disabled in the cloud deployment due to MapmyIndia IP-whitelisting restrictions. However, the simulation below demonstrates the underlying logic using historical data.")
+        
+    fetch_clicked = st.button("📡 Fetch Live Congestion Data", type="primary", disabled=not has_token)
 
     selected_row = df_juncs_t4[df_juncs_t4["junction_name"] == selected_monitor_site].iloc[0]
     
@@ -1554,7 +1564,7 @@ with tab5:
             <div style="background:rgba(255,140,0,0.08);border:1px solid rgba(255,140,0,0.25);
                         border-radius:12px;padding:18px;margin:16px 0;">
                 <p style="margin:0;font-size:15px;color:#FF8C00;font-weight:500;line-height:1.6;">
-                    🛵 <strong>Coverage confirmed:</strong> <strong>{_best['junction_name']}</strong>
+                    🟣 <strong>Coverage confirmed:</strong> <strong>{_best['junction_name']}</strong>
                     has <strong>{int(_best['restaurant_count'])} restaurants within 500 m</strong>,
                     generating a continuous stream of delivery riders through this exact enforcement
                     hotspot. <strong>{_sites_above_10} of {len(_cam_names)} camera sites</strong>
