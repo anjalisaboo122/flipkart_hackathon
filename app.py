@@ -719,13 +719,12 @@ with tab2:
         unsafe_allow_html=True
     )
     
-    # Load and process traffic_validation_fixed.csv
-    try:
-        traffic_val_df = pd.read_csv("data/traffic_validation_fixed.csv")
-        congestion_by_hour = traffic_val_df.groupby("hour")["congestion_ratio"].mean().reset_index(name="mean_congestion")
-    except Exception as e:
-        st.error(f"Error loading traffic validation data: {e}")
-        congestion_by_hour = pd.DataFrame(columns=["hour", "mean_congestion"])
+    # Hardcoded historical congestion ratio by hour (previously pulled from validation log)
+    hardcoded_ratios = [0.930715, 0.9235566666666667, 0.9041899999999999, 0.9346736842105263, 0.8871325000000001, 0.9104575, 0.9190950000000001, 0.9707399999999999, 1.0842325000000002, 1.1396575, 1.18201, 1.1904666666666666, 1.2156875, 1.22434, 1.348225, 1.2149625, 1.4077633333333333, 1.408515, 1.3978199999999998, 1.380555, 1.357395, 1.0736033333333335, 1.013485, 1.009690322580645]
+    congestion_by_hour = pd.DataFrame({
+        "hour": range(24),
+        "mean_congestion": hardcoded_ratios
+    })
 
     # Violations by hour (using df_h3 already loaded in scope)
     violations_by_hour = df_h3.groupby("hour").size().reset_index(name="violation_count")
@@ -1233,61 +1232,6 @@ with tab4:
         else:
             # Show the error honestly
             st.error(f"❌ Live API Call Failed: {res['error']}")
-            
-            # Fallback data calculation (Real historical averages only, no synthesis)
-            fallback_pct = None
-            mean_ratio = None
-            has_data = False
-            all_off_peak = False
-            
-            try:
-                traffic_val_df = pd.read_csv("data/traffic_validation_fixed.csv")
-                prefix = selected_monitor_site.split(" - ")[0]
-                site_readings = traffic_val_df[traffic_val_df["hotspot_name"].str.contains(prefix, na=False)]
-                if not site_readings.empty:
-                    has_data = True
-                    # Check if all readings are exclusively off-peak (before 6 AM or after 10 PM)
-                    off_peak_mask = (site_readings["hour"] < 6) | (site_readings["hour"] > 22)
-                    all_off_peak = off_peak_mask.all()
-                    
-                    mean_ratio = site_readings["congestion_ratio"].mean()
-                    fallback_pct = max(0.0, (mean_ratio - 1.0) * 100)
-            except Exception as e:
-                st.error(f"Debug Error loading fallback data: {e}")
-                
-            st.warning("⚠️ DEMO FALLBACK: Displaying historical congestion ratio for this site due to live API error/unavailability.")
-            
-            if has_data:
-                if all_off_peak:
-                    st.html(
-                        f"""
-                        <div style="background: rgba(91, 157, 240, 0.06); border: 1px solid rgba(91, 157, 240, 0.2); border-left: 3px solid #5b9df0; border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Inter', sans-serif;">
-                            <div style="font-size: 12px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-family: 'JetBrains Mono', monospace;">Historical Congestion Level</div>
-                            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 800; color: #5b9df0; margin: 5px 0;">{mean_ratio:.2f}x <span style="font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 400; color: #6c7078;">baseline</span></div>
-                            <div style="font-size: 13px; color: #a7abb3;">Historical off-peak congestion ratio (all available records were logged during off-peak hours and are not representative of typical daytime conditions).</div>
-                        </div>
-                        """
-                    )
-                else:
-                    st.html(
-                        f"""
-                        <div style="background: rgba(242, 184, 61, 0.06); border: 1px solid rgba(242, 184, 61, 0.2); border-left: 3px solid #f2b83d; border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Inter', sans-serif;">
-                            <div style="font-size: 12px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-family: 'JetBrains Mono', monospace;">Historical Congestion Level</div>
-                            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 800; color: #f2b83d; margin: 5px 0;">{fallback_pct:.1f}%</div>
-                            <div style="font-size: 13px; color: #a7abb3;">Real average derived from traffic validation log historical records for this site.</div>
-                        </div>
-                        """
-                    )
-            else:
-                st.html(
-                    """
-                    <div style="background: rgba(239, 83, 80, 0.06); border: 1px solid rgba(239, 83, 80, 0.2); border-left: 3px solid #ef5350; border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Inter', sans-serif;">
-                        <div style="font-size: 12px; color: #6c7078; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-family: 'JetBrains Mono', monospace;">Historical Congestion Level</div>
-                        <div style="font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 800; color: #ef5350; margin: 10px 0;">INSUFFICIENT DATA</div>
-                        <div style="font-size: 13px; color: #a7abb3;">No historical validation log records exist on file for this specific junction site.</div>
-                    </div>
-                    """
-                )
 
     # 3. Simulated Time-Series Chart
     st.markdown("---")
@@ -1304,10 +1248,7 @@ with tab4:
     st.markdown("This chart simulates what continuous camera monitoring would produce over a 72-hour period based on historical diurnal patterns, overlaid with any actual observed readings we have on file.")
 
     # Time series calculations
-    try:
-        traffic_val_df = pd.read_csv("data/traffic_validation_fixed.csv")
-    except:
-        traffic_val_df = pd.DataFrame()
+    traffic_val_df = pd.DataFrame()
 
     # Generate 72-hour timeline starting 2026-06-19 00:00:00
     start_date = pd.to_datetime("2026-06-19 00:00:00")
