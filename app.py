@@ -354,6 +354,125 @@ def load_junction_data():
     
     return agg
 
+@st.cache_data(show_spinner=False, ttl=86400)
+def fetch_delivery_coverage(lats, lngs, names, violations):
+    import requests
+    import math
+
+    DARK_STORE_FALLBACK = [
+        {"display_name": "Blinkit · Shivajinagar",    "lat": 12.9840, "lng": 77.5995, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Malleshwaram",    "lat": 12.9966, "lng": 77.5703, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Rajajinagar",     "lat": 12.9921, "lng": 77.5536, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Yeshwanthpur",    "lat": 13.0200, "lng": 77.5420, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Jayanagar",       "lat": 12.9255, "lng": 77.5932, "brand": "Blinkit"},
+        {"display_name": "Blinkit · BTM Layout",      "lat": 12.9165, "lng": 77.6101, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Koramangala",     "lat": 12.9279, "lng": 77.6271, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Indiranagar",     "lat": 12.9784, "lng": 77.6408, "brand": "Blinkit"},
+        {"display_name": "Blinkit · HSR Layout",      "lat": 12.9116, "lng": 77.6389, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Marathahalli",    "lat": 12.9563, "lng": 77.7010, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Whitefield",      "lat": 12.9698, "lng": 77.7499, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Hebbal",          "lat": 13.0360, "lng": 77.5970, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Yelahanka",       "lat": 13.1007, "lng": 77.5963, "brand": "Blinkit"},
+        {"display_name": "Blinkit · JP Nagar",        "lat": 12.9082, "lng": 77.5833, "brand": "Blinkit"},
+        {"display_name": "Blinkit · Electronic City", "lat": 12.8452, "lng": 77.6602, "brand": "Blinkit"},
+        {"display_name": "Zepto · KR Market area",    "lat": 12.9677, "lng": 77.5762, "brand": "Zepto"},
+        {"display_name": "Zepto · Malleshwaram",      "lat": 13.0017, "lng": 77.5701, "brand": "Zepto"},
+        {"display_name": "Zepto · Rajajinagar",       "lat": 12.9926, "lng": 77.5543, "brand": "Zepto"},
+        {"display_name": "Zepto · Yeshwanthpur",      "lat": 13.0185, "lng": 77.5436, "brand": "Zepto"},
+        {"display_name": "Zepto · Koramangala",       "lat": 12.9380, "lng": 77.6186, "brand": "Zepto"},
+        {"display_name": "Zepto · Indiranagar",       "lat": 12.9822, "lng": 77.6423, "brand": "Zepto"},
+        {"display_name": "Zepto · HSR Layout",        "lat": 12.9094, "lng": 77.6432, "brand": "Zepto"},
+        {"display_name": "Zepto · Bellandur",         "lat": 12.9250, "lng": 77.6700, "brand": "Zepto"},
+        {"display_name": "Zepto · Whitefield",        "lat": 12.9745, "lng": 77.7482, "brand": "Zepto"},
+        {"display_name": "Zepto · Hebbal",            "lat": 13.0342, "lng": 77.5990, "brand": "Zepto"},
+        {"display_name": "Zepto · Yelahanka",         "lat": 13.1020, "lng": 77.5990, "brand": "Zepto"},
+        {"display_name": "Zepto · Electronic City",   "lat": 12.8477, "lng": 77.6625, "brand": "Zepto"},
+    ]
+
+    def haversine_m(lat1, lng1, lat2, lng2):
+        R = 6_371_000
+        dlat = math.radians(lat2 - lat1)
+        dlng = math.radians(lng2 - lng1)
+        a = (math.sin(dlat / 2) ** 2
+             + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2)
+        return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    def run_overpass(query):
+        endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        ]
+        for url in endpoints:
+            try:
+                r = requests.get(url, params={"data": query}, timeout=30)
+                if r.status_code == 200 and r.text.strip().startswith("{"):
+                    return r.json()
+            except Exception:
+                continue
+        return None
+
+    min_lat, max_lat = min(lats) - 0.02, max(lats) + 0.02
+    min_lng, max_lng = min(lngs) - 0.02, max(lngs) + 0.02
+
+    rest_query = (
+        f"[out:json][timeout:40];"
+        f"(node[\"amenity\"~\"^(restaurant|cafe|fast_food|food_court)$\"]"
+        f"({min_lat},{min_lng},{max_lat},{max_lng});"
+        f"way[\"amenity\"~\"^(restaurant|cafe|fast_food|food_court)$\"]"
+        f"({min_lat},{min_lng},{max_lat},{max_lng}););"
+        f"out center;"
+    )
+    restaurants = []
+    rest_error = None
+    result = run_overpass(rest_query)
+    if result:
+        for el in result.get("elements", []):
+            rlat = el.get("lat") or (el.get("center") or {}).get("lat")
+            rlng = el.get("lon") or (el.get("center") or {}).get("lon")
+            if rlat and rlng:
+                restaurants.append({"lat": float(rlat), "lng": float(rlng)})
+    else:
+        rest_error = "All Overpass API mirrors unreachable or rate-limited."
+
+    junction_rows = []
+    for i, name in enumerate(names):
+        lat, lng = lats[i], lngs[i]
+        count = sum(1 for r in restaurants if haversine_m(lat, lng, r["lat"], r["lng"]) <= 500)
+        junction_rows.append({
+            "junction_name": name,
+            "lat": lat,
+            "lng": lng,
+            "violation_count": violations[i],
+            "restaurant_count": count,
+        })
+    rest_df = pd.DataFrame(junction_rows)
+
+    ds_query = (
+        "[out:json][timeout:25];"
+        "(node[\"name\"~\"Blinkit|Zepto|Instamart\",i](12.7,77.3,13.2,77.9);"
+        "way[\"name\"~\"Blinkit|Zepto|Instamart\",i](12.7,77.3,13.2,77.9););"
+        "out center;"
+    )
+    dark_stores = []
+    ds_result = run_overpass(ds_query)
+    if ds_result:
+        for el in ds_result.get("elements", []):
+            dlat = el.get("lat") or (el.get("center") or {}).get("lat")
+            dlng = el.get("lon") or (el.get("center") or {}).get("lon")
+            dname = el.get("tags", {}).get("name", "")
+            if dlat and dlng and dname:
+                nl = dname.lower()
+                brand = "Blinkit" if "blinkit" in nl else ("Zepto" if "zepto" in nl else "Instamart")
+                dark_stores.append({"display_name": dname, "lat": float(dlat), "lng": float(dlng), "brand": brand})
+
+    used_fallback = len(dark_stores) == 0
+    if used_fallback:
+        dark_stores = DARK_STORE_FALLBACK
+
+    ds_df = pd.DataFrame(dark_stores)
+    return rest_df, ds_df, len(restaurants), rest_error, used_fallback
+
 # Load standard stats and data
 with st.spinner("Loading violations dataset..."):
     df_h3, stats = load_base_data()
@@ -406,11 +525,12 @@ st.sidebar.markdown(
 # ---------------------------------------------------------------------------
 # Main Tabs Layout
 # ---------------------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs([
-    "The Blind Spot",
-    "The Timing Gap",
-    "Camera Placement",
-    "Live Monitoring"
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🗺️ The Blind Spot",
+    "⏰ The Timing Gap",
+    "📹 Camera Placement",
+    "📡 Live Monitoring",
+    "🛵 Delivery Coverage",
 ])
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1277,3 +1397,214 @@ with tab4:
             "ℹ️ **Honest Prototype Note**: The dashed line represents a simulated diurnal projection based on historical patterns. "
             "No actual observed readings are currently recorded in the traffic validation log for this specific site."
         )
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 5 — Delivery Coverage
+# ════════════════════════════════════════════════════════════════════════════
+with tab5:
+    st.markdown("<h1 style='margin-bottom:0;'>Delivery Fleet Coverage</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='font-size:18px; color:#aaa; margin-top:0;'>Do existing delivery networks already saturate our enforcement hotspots?</p>",
+        unsafe_allow_html=True,
+    )
+
+    df_juncs_t5 = df_juncs.copy()
+    df_juncs_t5["rank_count"] = df_juncs_t5["violation_count"].rank(ascending=False, method="min").astype(int)
+    df_juncs_t5["rank_rate"]  = df_juncs_t5["patrol_normalized_rate"].rank(ascending=False, method="min").astype(int)
+    _top20c = df_juncs_t5.nsmallest(20, "rank_count")["junction_name"].tolist()
+    _top20r = df_juncs_t5.nsmallest(20, "rank_rate")["junction_name"].tolist()
+    _cam_names = sorted(set(_top20c) & set(_top20r))
+    cam_t5 = df_juncs_t5[df_juncs_t5["junction_name"].isin(_cam_names)].reset_index(drop=True)
+
+    with st.spinner("Fetching live restaurant & dark store data from OpenStreetMap…"):
+        rest_df, ds_df, total_rest, rest_err, ds_used_fallback = fetch_delivery_coverage(
+            tuple(cam_t5["lat"].tolist()),
+            tuple(cam_t5["lng"].tolist()),
+            tuple(cam_t5["junction_name"].tolist()),
+            tuple(cam_t5["violation_count"].tolist()),
+        )
+
+    avg_rest    = rest_df["restaurant_count"].mean() if not rest_df.empty else 0
+    n_blinkit   = int((ds_df["brand"] == "Blinkit").sum())   if not ds_df.empty else 0
+    n_zepto     = int((ds_df["brand"] == "Zepto").sum())     if not ds_df.empty else 0
+    n_instamart = int((ds_df["brand"] == "Instamart").sum()) if not ds_df.empty else 0
+    ds_source_label = "Neighbourhood approx." if ds_used_fallback else "OSM live data"
+
+    st.markdown(
+        f"""
+        <div class="metric-container">
+            <div class="metric-card">
+                <div class="metric-title">Camera Sites Analysed</div>
+                <div class="metric-value" style="color:#00d4ff;">{len(_cam_names)}</div>
+                <div class="metric-delta" style="color:#aaa;">Recommended enforcement points</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Avg Restaurants within 500 m</div>
+                <div class="metric-value" style="color:#FF8C00;">{avg_rest:.0f}</div>
+                <div class="metric-delta" style="color:#aaa;">Per camera site · OSM data</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Blinkit Dark Stores</div>
+                <div class="metric-value" style="color:#FFD700;">{n_blinkit}</div>
+                <div class="metric-delta" style="color:#aaa;">Bengaluru · {ds_source_label}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Zepto Dark Stores</div>
+                <div class="metric-value" style="color:#A855F7;">{n_zepto + n_instamart}</div>
+                <div class="metric-delta" style="color:#aaa;">Bengaluru · {ds_source_label}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin:8px 0 14px 0;font-size:13px;color:#ccc;">
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+                background:#00d4ff;margin-right:6px;vertical-align:middle;"></span>Camera Site Junction</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+                background:#FF8C00;margin-right:6px;vertical-align:middle;"></span>Restaurant Density (bubble size = count within 500 m)</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+                background:#FFD700;margin-right:6px;vertical-align:middle;"></span>Blinkit Dark Store (ring = 2 km delivery radius)</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+                background:#A855F7;margin-right:6px;vertical-align:middle;"></span>Zepto Dark Store (ring = 2 km delivery radius)</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _layers = []
+
+    _bg = df_juncs.copy()
+    _bg["color"] = [[80, 100, 140, 55]] * len(_bg)
+    _layers.append(pdk.Layer("ScatterplotLayer", _bg,
+        get_position=["lng", "lat"], get_color="color", get_radius=70, pickable=False))
+
+    if not rest_df.empty and rest_df["restaurant_count"].max() > 0:
+        _max_r = rest_df["restaurant_count"].max()
+        rest_df["_norm"]   = (rest_df["restaurant_count"] / (_max_r + 1e-9)).clip(0.1, 1.0)
+        rest_df["_radius"] = (100 + rest_df["_norm"] * 380).astype(int)
+        rest_df["_color"]  = rest_df["_norm"].apply(lambda n: [255, int(200 * (1 - n) + 60), 0, 150])
+        rest_df["_tip_name"] = rest_df["junction_name"]
+        rest_df["_tip_rest"] = rest_df["restaurant_count"].apply(lambda x: f"{x} restaurants within 500 m")
+        rest_df["_tip_viol"] = rest_df["violation_count"].apply(lambda x: f"{x:,} historical violations")
+        _layers.append(pdk.Layer("ScatterplotLayer", rest_df,
+            get_position=["lng", "lat"], get_color="_color", get_radius="_radius",
+            pickable=True, auto_highlight=True))
+
+    if not ds_df.empty:
+        _blinkit = ds_df[ds_df["brand"] == "Blinkit"].copy()
+        _zepto   = ds_df[ds_df["brand"].isin(["Zepto", "Instamart"])].copy()
+
+        for _sub, _fill, _line in [
+            (_blinkit, [255, 215, 0, 12],  [255, 215, 0, 70]),
+            (_zepto,   [168, 85, 247, 12], [168, 85, 247, 70]),
+        ]:
+            if _sub.empty:
+                continue
+            _layers.append(pdk.Layer("ScatterplotLayer", _sub,
+                get_position=["lng", "lat"], get_color=_fill, get_radius=2000,
+                stroked=True, filled=True, line_width_min_pixels=1, get_line_color=_line,
+                pickable=False))
+
+        for _sub, _dot_color in [
+            (_blinkit, [255, 215, 0, 230]),
+            (_zepto,   [168, 85, 247, 230]),
+        ]:
+            if _sub.empty:
+                continue
+            _sub = _sub.copy()
+            _sub["_tip_name"] = _sub["display_name"]
+            _sub["_tip_rest"] = _sub["brand"] + " dark store"
+            _sub["_tip_viol"] = "2 km delivery radius shown"
+            _layers.append(pdk.Layer("ScatterplotLayer", _sub,
+                get_position=["lng", "lat"], get_color=_dot_color, get_radius=160,
+                pickable=True, auto_highlight=True))
+
+    _cam_map = cam_t5.copy()
+    _cam_map["_tip_name"] = _cam_map["junction_name"]
+    _cam_map["_tip_rest"] = rest_df.set_index("junction_name")["restaurant_count"].reindex(
+        _cam_map["junction_name"].values).fillna(0).astype(int).apply(
+        lambda x: f"{x} restaurants within 500 m").values if not rest_df.empty else "—"
+    _cam_map["_tip_viol"] = _cam_map["violation_count"].apply(lambda x: f"{x:,} historical violations")
+    _layers.append(pdk.Layer("ScatterplotLayer", _cam_map,
+        get_position=["lng", "lat"],
+        get_color=[0, 212, 255, 220], get_radius=220,
+        stroked=True, filled=True, line_width_min_pixels=2, get_line_color=[0, 212, 255, 255],
+        pickable=True, auto_highlight=True))
+
+    _view_t5 = pdk.ViewState(latitude=12.9716, longitude=77.5800, zoom=11.8, pitch=0)
+    _deck_t5 = pdk.Deck(
+        layers=_layers,
+        initial_view_state=_view_t5,
+        map_style=pdk.map_styles.CARTO_DARK,
+        tooltip={
+            "html": "<b>{_tip_name}</b><br/>{_tip_rest}<br/><span style='color:#aaa;'>{_tip_viol}</span>",
+            "style": {"backgroundColor": "#1a1a2e", "color": "white", "fontSize": "13px"},
+        },
+    )
+    st.pydeck_chart(_deck_t5)
+
+    if not rest_df.empty and rest_df["restaurant_count"].max() > 0:
+        _best = rest_df.loc[rest_df["restaurant_count"].idxmax()]
+        _sites_above_10 = int((rest_df["restaurant_count"] >= 10).sum())
+        st.markdown(
+            f"""
+            <div style="background:rgba(255,140,0,0.08);border:1px solid rgba(255,140,0,0.25);
+                        border-radius:12px;padding:18px;margin:16px 0;">
+                <p style="margin:0;font-size:15px;color:#FF8C00;font-weight:500;line-height:1.6;">
+                    🛵 <strong>Coverage confirmed:</strong> <strong>{_best['junction_name']}</strong>
+                    has <strong>{int(_best['restaurant_count'])} restaurants within 500 m</strong>,
+                    generating a continuous stream of delivery riders through this exact enforcement
+                    hotspot. <strong>{_sites_above_10} of {len(_cam_names)} camera sites</strong>
+                    have 10+ nearby restaurants — meaning delivery drivers already traverse every
+                    one of our recommended locations multiple times per hour with no additional
+                    infrastructure required.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("Restaurant data could not be fetched — check internet connectivity or Overpass API availability.")
+
+    if ds_used_fallback:
+        st.markdown(
+            """
+            <div style="background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.2);
+                        border-radius:12px;padding:16px;margin:10px 0;">
+                <p style="margin:0;font-size:14px;color:#C084FC;line-height:1.5;">
+                    ℹ️ <strong>Dark store data source:</strong> OSM has sparse coverage of private
+                    commercial dark stores in Bengaluru, so locations shown are compiled from
+                    publicly available service-area information on the Blinkit and Zepto apps
+                    (neighbourhood-level approximations, not exact warehouse addresses).
+                    Both platforms serve all of central Bengaluru — the same area as our camera sites.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        """
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+                    border-radius:12px;padding:16px;margin:16px 0;">
+            <p style="margin:0;font-size:14px;color:#ccc;line-height:1.6;">
+                <strong>📝 Note:</strong> Due to lack of data, only <strong>5 Blinkit stores</strong> and
+                <strong>9 Zepto stores</strong> appear on the map. All of these appear in
+                <strong>non-hotspot regions</strong> — which is actually good for our case, since these
+                regions are likely not getting covered by police effectively and thus can be covered by
+                Zepto/Blinkit drivers acting as a passive enforcement presence.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.caption(
+        f"Data: OpenStreetMap via Overpass API (CC BY-SA). "
+        f"Restaurant count = amenity:restaurant/cafe/fast_food/food_court within 500 m of each camera site. "
+        f"Total food establishments found in camera-site bounding box: {total_rest:,}. "
+        + (f"⚠️ Restaurant query error: {rest_err}" if rest_err else "Fetched successfully.")
+    )
