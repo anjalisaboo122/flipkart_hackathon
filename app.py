@@ -517,7 +517,18 @@ st.sidebar.markdown(
         <div style="display:flex; justify-content:space-between;"><span style="color:#6c7078;">Junctions mapped</span><span class="mono" style="color:#edeef0;">{len(df_juncs)}</span></div>
         <div style="display:flex; justify-content:space-between; gap:8px;"><span style="color:#6c7078;">Date range</span><span class="mono" style="color:#edeef0; font-size:11px; text-align:right;">{stats['date_range'][0]} → {stats['date_range'][1]}</span></div>
     </div>
-    <div class="hazard-container" style="margin-top: 30px;">
+    <div style="height:1px; margin:18px 0; background-image:repeating-linear-gradient(to right, #272a30 0 9px, transparent 9px 16px);"></div>
+    
+    <a href="https://huggingface.co/" target="_blank" style="display:flex; align-items:center; justify-content:center; gap:10px; padding:14px 16px; margin: 25px 0 10px 0; border-radius:10px; background:linear-gradient(135deg, rgba(139,121,242,0.1) 0%, rgba(91,157,240,0.1) 100%); border:1px solid rgba(139,121,242,0.4); color:#8b79f2; text-decoration:none; font-family:'Inter', sans-serif; font-weight:700; font-size:14px; letter-spacing:0.5px; box-shadow:0 0 15px rgba(139,121,242,0.15);">
+        <span style="font-size:16px;">📹</span> Launch OUR Illegal Parking Detection Model ↗
+    </a>
+    """,
+    unsafe_allow_html=True
+)
+
+st.sidebar.markdown(
+    """
+    <div class="hazard-container" style="margin-top: 20px;">
         <div class="hazard-stripes"></div>
         <div class="hazard-text">TRAFFIKART · TRAFFIC DETECTION</div>
         <div class="hazard-stripes"></div>
